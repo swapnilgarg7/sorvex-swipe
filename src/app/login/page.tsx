@@ -81,7 +81,7 @@ export default function LoginPage() {
       <div className="mb-10">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/50">
           <Zap className="h-3 w-3 text-purple-400" />
-          Two seconds a task
+          Under a minute a task
         </div>
         <h1 className="text-4xl leading-[1.1] font-bold tracking-tight">
           Judge AI.

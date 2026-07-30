@@ -21,6 +21,15 @@ interface PendingJudgment {
 
 interface SessionState {
   queue: TaskPair[];
+  /**
+   * Every task id this session has already shown or judged.
+   *
+   * The server's `next_tasks` excludes judged tasks, but submission is
+   * optimistic and fire-and-forget — a refill can reach the server before the
+   * judgment row lands, and the task you just swiped comes straight back. This
+   * set is the client-side guard. Once a card is gone, it is gone.
+   */
+  seen: Set<string>;
   loading: boolean;
   error: string | null;
 
@@ -53,6 +62,7 @@ async function loadTasks(limit: number): Promise<TaskPair[]> {
 
 export const useSession = create<SessionState>((set, get) => ({
   queue: [],
+  seen: new Set<string>(),
   loading: false,
   error: null,
 
@@ -78,9 +88,12 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const tasks = await loadTasks(BATCH);
       set((s) => {
-        // De-dupe: a refill can overlap with what is already queued.
-        const seen = new Set(s.queue.map((t) => t.id));
-        return { queue: [...s.queue, ...tasks.filter((t) => !seen.has(t.id))] };
+        // Drop anything already queued or already swiped this session.
+        const queued = new Set(s.queue.map((t) => t.id));
+        const fresh = tasks.filter(
+          (t) => !queued.has(t.id) && !s.seen.has(t.id),
+        );
+        return { queue: [...s.queue, ...fresh] };
       });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "failed to load" });
@@ -98,6 +111,7 @@ export const useSession = create<SessionState>((set, get) => ({
 
     set((s) => ({
       queue: s.queue.filter((t) => t.id !== j.taskId),
+      seen: new Set(s.seen).add(j.taskId),
       balanceCents: s.balanceCents + optimistic,
       judgedCount: s.judgedCount + (j.choice === "skip" ? 0 : 1),
       sessionJudged: s.sessionJudged + (j.choice === "skip" ? 0 : 1),

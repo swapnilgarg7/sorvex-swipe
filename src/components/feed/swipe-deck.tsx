@@ -15,7 +15,11 @@ import { useSession } from "@/store/session";
 import type { Choice, Confidence } from "@/types/db";
 
 /** Drag past this (px) and the card commits on release. */
-const THROW_THRESHOLD = 110;
+const THROW_THRESHOLD = 80;
+/** A flick shorter than the threshold still commits if it is fast enough. */
+const FLICK_VELOCITY = 380;
+/** Distance at which the A/B hint reaches full strength. */
+const HINT_FULL = 90;
 
 type Step = "choose" | "confidence" | "reason";
 
@@ -33,8 +37,10 @@ export function SwipeDeck() {
   const [exitX, setExitX] = useState(0);
 
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-260, 0, 260], [-11, 0, 11]);
-  const opacity = useTransform(x, [-260, -40, 0, 40, 260], [0.4, 1, 1, 1, 0.4]);
+  const rotate = useTransform(x, [-300, 0, 300], [-9, 0, 9]);
+  // Hint strength tracks the drag: A on the left, B on the right.
+  const aHint = useTransform(x, [-HINT_FULL, -14, 0], [1, 0, 0]);
+  const bHint = useTransform(x, [0, 14, HINT_FULL], [0, 0, 1]);
   const [lean, setLean] = useState(0);
 
   // Clock starts when the card is rendered, stops when a choice is made.

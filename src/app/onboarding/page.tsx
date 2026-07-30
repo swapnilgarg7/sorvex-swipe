@@ -48,7 +48,12 @@ export default function OnboardingPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // 23505 = unique_violation, which here can only be the handle.
+      setError(
+        error.code === "23505"
+          ? "That handle is already taken — try another."
+          : error.message,
+      );
       setSaving(false);
       return;
     }

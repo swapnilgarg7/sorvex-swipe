@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Sorvex — Judge AI. Get paid.",
   description:
-    "Swipe to pick the better AI response. Two seconds a task. Every judgment trains frontier models — and pays you.",
+    "Swipe to pick the better AI response. Under a minute a task. Every judgment trains frontier models — and pays you.",
 };
 
 export const viewport: Viewport = {
