@@ -1,33 +1,79 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "busy" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  // ─── Magic link — disabled ────────────────────────────────────────────────
+  // Supabase's built-in email service caps at ~2 messages/hour, which makes
+  // this unusable during development ("email rate limit exceeded"). Restore it
+  // once custom SMTP is configured under Project Settings → Authentication →
+  // SMTP; `/auth/callback` already handles the code exchange.
+  //
+  // async function sendMagicLink() {
+  //   const supabase = createClient();
+  //   const { error } = await supabase.auth.signInWithOtp({
+  //     email,
+  //     options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+  //   });
+  //   if (error) throw error;
+  //   setStatus("sent");
+  // }
+
+  async function signInWithPassword() {
+    const supabase = createClient();
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    // No account yet — create one. With "Confirm email" off this returns a
+    // session immediately and never sends mail.
+    if (error?.code === "invalid_credentials") {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (signUpError) throw signUpError;
+    } else if (error) {
+      throw error;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      // Email confirmation is still switched on, so there is no session yet.
+      setStatus("sent");
+      return;
+    }
+
+    router.replace("/");
+    router.refresh();
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setStatus("sending");
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
-
-    if (error) {
-      setError(error.message);
+    setStatus("busy");
+    try {
+      await signInWithPassword();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
       setStatus("idle");
-      return;
     }
-    setStatus("sent");
   }
 
   return (
@@ -50,9 +96,12 @@ export default function LoginPage() {
 
       {!isSupabaseConfigured ? (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200/80">
-          <p className="mb-1 font-medium text-amber-200">Supabase not configured</p>
+          <p className="mb-1 font-medium text-amber-200">
+            Supabase not configured
+          </p>
           <p className="leading-relaxed text-amber-200/60">
-            Add <code className="font-mono text-xs">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
+            Add{" "}
+            <code className="font-mono text-xs">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
             and{" "}
             <code className="font-mono text-xs">
               NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -83,16 +132,33 @@ export default function LoginPage() {
             placeholder="you@example.com"
             className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white transition duration-200 placeholder:text-white/25 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/40 focus:outline-none"
           />
+
+          <input
+            type="password"
+            required
+            minLength={8}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (8+ characters)"
+            className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white transition duration-200 placeholder:text-white/25 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/40 focus:outline-none"
+          />
+
           <Button
             type="submit"
             size="lg"
-            disabled={status === "sending"}
+            disabled={status === "busy"}
             className="w-full"
           >
-            {status === "sending" ? "Sending…" : "Send sign-in link"}
-            {status !== "sending" && <ArrowRight className="h-4 w-4" />}
+            {status === "busy" ? "Working…" : "Continue"}
+            {status !== "busy" && <ArrowRight className="h-4 w-4" />}
           </Button>
+
           {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <p className="pt-1 text-center text-xs text-white/30">
+            New here? Entering an email and password creates your account.
+          </p>
         </form>
       )}
 

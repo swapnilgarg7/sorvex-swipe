@@ -226,7 +226,9 @@ begin
   update public.profiles p set
     balance_cents  = p.balance_cents + v_award,
     xp             = p.xp + v_xp_gain,
-    judged_count   = p.judged_count + 1,
+    -- A skip is not a judgment. This must match the optimistic client update
+    -- in src/store/session.ts, or the HUD drifts from the server on reconcile.
+    judged_count   = p.judged_count + (case when p_choice = 'skip' then 0 else 1 end),
     gold_seen      = p.gold_seen + (case when v_is_gold and p_choice <> 'skip' then 1 else 0 end),
     gold_correct   = p.gold_correct + (case when v_correct then 1 else 0 end),
     streak_days    = v_streak,
