@@ -2,10 +2,22 @@
 -- Sorvex swipe feed — seed tasks
 -- Run after schema.sql. Safe to re-run: truncates task_pairs first.
 --
--- ~50 pairs across Coding, Math, Medicine, Law, Creative Writing.
--- Rows with gold_winner set are GOLD: one response is defensibly better, and
--- the annotator's agreement with it is what feeds gold_correct / gold_seen.
--- Everything else is a genuine preference judgment with no key.
+-- 46 pairs across Coding, Math, Medicine, Law, Creative Writing.
+--
+-- Rows with gold_winner set are GOLD: response B contains a defensible factual
+-- error, and the annotator's agreement with the key feeds gold_correct /
+-- gold_seen. Everything else is a genuine preference judgment with no key.
+--
+-- Two rules held here:
+--   * No Creative Writing task is ever gold. "Better prose" is aesthetic
+--     judgment, and scoring an annotator against it would be measuring taste
+--     conformity, not quality.
+--   * Where B is merely less detailed rather than wrong, gold is NULL.
+--
+-- Note the gold rate in this seed (~1 in 3) is far higher than production
+-- should run. These are demo tasks written as clean good/bad pairs so the
+-- accuracy stat moves quickly. A real queue should sample gold at ~5-10% —
+-- enough to calibrate, rare enough that annotators are not taking a test.
 -- ============================================================================
 
 truncate table public.judgments cascade;
@@ -34,7 +46,7 @@ def add_item(item, bucket=None):
  'What is the difference between `git merge` and `git rebase`?',
  'Merge creates a new commit that ties two histories together, preserving the branch topology exactly as it happened. Rebase replays your commits one at a time onto a new base, producing a linear history but rewriting commit hashes. Practical rule: rebase your own unpushed work to keep history clean; merge when the branch is shared, because rebasing published commits forces everyone else to recover from rewritten history.',
  'They both combine branches. `git merge` merges the branches together and `git rebase` rebases them. Most teams prefer rebase because the history looks nicer in the log. You can also use `git pull --rebase` to do it automatically when pulling.',
- 'a', 1, 3),
+ null, 1, 3),
 
 ('Coding',
  'How do I center a div horizontally and vertically with CSS?',
@@ -136,7 +148,7 @@ This is the correct way to await inside an iteration.',
  'Explain Bayes'' theorem to someone who has never seen it.',
  'It tells you how to update a belief when evidence arrives. Say 1% of people have a disease and a test is 90% accurate. Out of 1000 people, 10 are sick and ~9 test positive; 990 are healthy and ~99 still test positive. So of ~108 positives, only 9 are truly sick — about 8%. The base rate dominates. Bayes'' theorem is just that arithmetic written as P(A|B) = P(B|A)P(A)/P(B).',
  'Bayes'' theorem is P(A|B) = P(B|A) × P(A) / P(B). It lets you compute the conditional probability of A given B when you know the reverse conditional. It is fundamental to Bayesian statistics and machine learning.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Math',
  'What is 0.999... (repeating) equal to?',
@@ -246,7 +258,7 @@ This is the correct way to await inside an iteration.',
  'What is the difference between a patent, a trademark, and a copyright?',
  'A patent protects an invention — a functional method or device — for a limited term, in exchange for public disclosure, and must be applied for. A trademark protects marks identifying a commercial source (names, logos), lasts indefinitely while used and defended, and prevents confusingly similar use. Copyright protects original expression fixed in a medium, arises automatically on creation, and covers the expression rather than the underlying idea.',
  'A patent is for inventions, a trademark is for logos and brand names, and copyright is for creative works like books, music, and software. All three protect your intellectual property from being copied by other people.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Law',
  'If I find money on the street, is it legally mine?',
@@ -265,31 +277,31 @@ This is the correct way to await inside an iteration.',
  'Write the opening line of a novel about a lighthouse keeper.',
  'For thirty-one years Aldous had kept the light, and in all that time the sea had never once thanked him.',
  'It was a dark and stormy night, and the lighthouse keeper was very lonely as he climbed the long spiral staircase to light the lamp.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Describe rain without using the words "rain", "wet", or "water".',
  'The gutters spoke first — a thin metallic stutter that thickened into a single held note. Below, the pavement went from grey to black in the space of a breath, and the smell came up out of it, mineral and sudden, the way stone gives back what it has been holding all summer.',
  'Droplets fell from the sky, cascading down in a torrent of liquid. The precipitation soaked everything below, forming puddles on the ground as the downpour continued relentlessly through the afternoon.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Give me feedback on this sentence: "She walked slowly into the room, feeling very nervous about what she was about to do."',
  'The adverbs are doing work the verbs and details should do. "Walked slowly" wants a verb that carries the pace on its own; "feeling very nervous" tells us the emotion instead of showing a symptom. Try something closer to: "She took the room in three steps and stopped, one hand still on the door frame." Same information, but the reader infers the nerves rather than being told about them.',
  'This is a good sentence that clearly establishes the character''s emotional state and creates tension. You could make it stronger by adding more sensory detail about the room and describing what she is about to do to build suspense.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Write a two-sentence horror story.',
  'The last man on Earth sat alone in a room. There was a knock at the door.',
  'Sarah heard a terrifying noise coming from the basement, so she slowly went downstairs to investigate. What she saw down there was so horrifying that she screamed and screamed and never stopped screaming.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'How do I write convincing dialogue?',
  'Give people different verbal habits — sentence length, what they avoid saying, whether they answer the question asked. Real conversation is mostly people talking past each other. Cut greetings and logistics unless they carry weight. Trust "said"; the fancy alternatives call attention to the tag instead of the line. Then read it aloud — the ear catches what the eye forgives.',
  'Good dialogue should sound natural and realistic. Listen to how people talk in real life and try to capture that on the page. Give each character a distinct voice so readers can tell them apart, and avoid using too much exposition in dialogue.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Write a haiku about a city at 3am.',
@@ -299,25 +311,25 @@ keeping time for us',
  'The city sleeps now
 Empty streets and quiet lights
 Three in the morning',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Suggest a better title than "The Journey" for a memoir about leaving home at seventeen.',
  'Titles do more work when they are concrete and slightly off-balance. Some directions: *Seventeen and the Long Way Round*; *What I Took*; *The House Kept Standing*; *No Forwarding Address*. The last two carry the leaving without announcing it, which is usually the stronger move for memoir — let the specific object or image imply the arc.',
  'Here are some alternative titles you could consider: "My Journey Home", "Finding Myself", "The Road Ahead", "Leaving Home", "A New Beginning", "Coming of Age", "The Long Road", "Chasing Dreams".',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Is it bad to use the passive voice?',
  'No, it is a tool with a specific use: it foregrounds the object and lets you omit or delay the actor. "The bill was quietly shelved" is better than naming a subject you do not want to name yet. The advice against it exists because passive constructions pile up in institutional prose and drain the sentence of agency. Use it deliberately; the problem is defaulting to it.',
  'Yes, you should avoid the passive voice as much as possible. Active voice is stronger, clearer, and more engaging for readers. Most style guides recommend using active voice in almost all situations.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'Rewrite this to be less corporate: "We are excited to announce the launch of our new synergistic platform solution."',
  '"Our new platform is live." — Then one concrete sentence about what it does for the reader. The excitement should come from the thing being useful, not from an adjective announcing that you are excited.',
  '"We are thrilled to unveil our innovative new platform!" This version is more energetic and uses stronger language to convey enthusiasm while remaining professional and on-brand.',
- 'a', 2, 5),
+ null, 2, 5),
 
 ('Creative Writing',
  'What makes a good short story ending?',
@@ -329,4 +341,4 @@ Three in the morning',
  'Give me a writing prompt involving a locked door.',
  'She had lived in the flat for six years before noticing that the hallway was two feet shorter than the one in the identical flat downstairs.',
  'Write a story about a mysterious locked door. What is behind it? Who locked it and why? Explore the secrets that lie beyond as your character finds the key and discovers the truth.',
- 'a', 2, 5);
+ null, 2, 5);

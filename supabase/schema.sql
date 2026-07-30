@@ -264,6 +264,11 @@ stable
 security definer
 set search_path = public
 as $$
+  with me as (
+    select coalesce(p.domains, '{}'::text[]) as domains
+    from public.profiles p
+    where p.id = auth.uid()
+  )
   select t.*
   from public.task_pairs_public t
   where not exists (
@@ -271,8 +276,9 @@ as $$
     where j.user_id = auth.uid() and j.task_id = t.id
   )
   and (
-    coalesce(array_length((select p.domains from public.profiles p where p.id = auth.uid()), 1), 0) = 0
-    or t.domain = any ((select p.domains from public.profiles p where p.id = auth.uid()))
+    -- No domains picked (or no profile row yet) means "show me everything".
+    coalesce((select cardinality(m.domains) from me m), 0) = 0
+    or (select m.domains from me m) @> array[t.domain]
   )
   order by random()
   limit least(greatest(p_limit, 1), 30);

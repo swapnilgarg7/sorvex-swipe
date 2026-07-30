@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sorvex — swipe feed
 
-## Getting Started
+Judge AI. Get paid.
 
-First, run the development server:
+An annotation platform that feels like scrolling TikTok. Instead of consuming
+content, you evaluate AI responses — and get paid for every high-quality
+judgment. Two seconds a task, not ninety.
+
+## Setup
+
+```bash
+npm install
+cp .env.example .env.local   # then fill in both Supabase values
+```
+
+Get the two keys from **Supabase dashboard → your project → Project Settings →
+API Keys**: the *Project URL* and the *Publishable key* (older projects call it
+the *anon / public* key — either works).
+
+Then, in the Supabase **SQL Editor**, run in order:
+
+1. `supabase/schema.sql` — tables, RLS, and the grading function
+2. `supabase/seed.sql` — ~50 prompt/response pairs across five domains
+
+Finally, under **Authentication → URL Configuration**, add
+`http://localhost:3000/auth/callback` to the redirect allow-list.
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it works
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Sign in with a magic link, pick your domains.
+2. A card shows a prompt and two model responses. Nothing else.
+3. Swipe left if A is better, right if B is better — or press `←` / `→`.
+4. One tap for confidence (`1` / `2` / `3`).
+5. Roughly every 15th task asks *why*, as six tap chips. Never typing.
+6. The next card is already on screen. Repeat.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Judgments submit optimistically in the background, so the feed never waits on
+the network. Some tasks are **gold** — they have a known better answer, and your
+agreement with it quietly builds an accuracy score.
 
-## Learn More
+## Scope
 
-To learn more about Next.js, take a look at the following resources:
+This is Phase 1: **A/B preference only**, deliberately. Rubric scoring,
+rewriting, and ranking are planned and gated behind reputation — see
+[CLAUDE.md](./CLAUDE.md) for the full roadmap and the reasoning.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Next.js 16 · React 19 · Tailwind v4 · Supabase (auth + Postgres) ·
+framer-motion · zustand · zod
 
-## Deploy on Vercel
+## Security
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Two things are enforced in the database, not the client:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The gold answer key (`task_pairs.gold_winner`) is never sent to the browser —
+  clients read a view that does not contain the column.
+- Grading and payout run inside a `SECURITY DEFINER` function, and there is no
+  insert policy on `judgments`, so a client cannot write its own row or choose
+  what it earned.
+
+No service-role key is used anywhere in this app.
