@@ -285,12 +285,14 @@ function SwipeHint({
       style={{ opacity }}
       className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl"
     >
+      {/* Dark scrim first so the card text recedes, then the colour wash. */}
+      <div className="absolute inset-0 rounded-3xl bg-[#08080A]/55" />
       <div
         className="absolute inset-0 rounded-3xl"
         style={{
           background: isA
-            ? "linear-gradient(to right, rgba(139,92,246,0.45), rgba(139,92,246,0.08))"
-            : "linear-gradient(to left, rgba(59,130,246,0.45), rgba(59,130,246,0.08))",
+            ? "linear-gradient(to right, rgba(139,92,246,0.6), rgba(139,92,246,0.15))"
+            : "linear-gradient(to left, rgba(59,130,246,0.6), rgba(59,130,246,0.15))",
         }}
       />
       <div

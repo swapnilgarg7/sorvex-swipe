@@ -51,6 +51,24 @@ Stack: Next.js 16 (App Router, `src/`), React 19, Tailwind v4 (tokens live in
 auth + Postgres, framer-motion, zustand, zod. Components are hand-rolled with
 `cn()`; there is no shadcn/radix, matching the sibling repos.
 
+## Swipe feel — the details that matter
+
+- `dragElastic={1}` on the card. Anything lower makes it resist the finger and
+  the swipe feels broken. Do not reintroduce elasticity to "add polish".
+- Commit on `offset > 80px` **or** `velocity > 380` — a fast flick that barely
+  moved should still resolve, and its direction comes from the velocity, not
+  the resting offset.
+- While dragging, a full-card wash plus an oversized A/B letter shows which
+  response the current drag would pick. Violet for A, blue for B —
+  **deliberately not green/red**: both answers are legitimate preferences, and
+  a right/wrong palette would imply the annotator is being marked, which is
+  only true on the hidden gold tasks.
+- **Once a card is gone, it is gone.** `session.seen` tracks every task id
+  swiped this session and filters refills. The server's `next_tasks` already
+  excludes judged tasks, but submission is optimistic and fire-and-forget, so
+  a refill can outrun the judgment write and hand back the card just swiped.
+  The client-side set is what actually prevents this — do not remove it.
+
 ## Two invariants — do not break these
 
 1. **`task_pairs.gold_winner` must never reach the browser.** Clients read
