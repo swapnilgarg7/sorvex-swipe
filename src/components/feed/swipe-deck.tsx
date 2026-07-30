@@ -6,6 +6,7 @@ import {
   motion,
   useMotionValue,
   useTransform,
+  type MotionValue,
 } from "framer-motion";
 import { ChevronLeft, ChevronRight, SkipForward } from "lucide-react";
 import { TaskCard } from "./task-card";
@@ -180,34 +181,43 @@ export function SwipeDeck() {
         <AnimatePresence mode="popLayout">
           <motion.div
             key={top.id}
-            className="absolute inset-0 cursor-grab active:cursor-grabbing"
-            style={{ x, rotate, opacity }}
+            className="absolute inset-0 cursor-grab touch-pan-y active:cursor-grabbing"
+            style={{ x, rotate }}
             drag={step === "choose" ? "x" : false}
-            dragElastic={0.55}
+            // dragElastic 1 = the card tracks the finger 1:1. Anything lower
+            // makes it feel like it is resisting the swipe.
+            dragElastic={1}
             dragConstraints={{ left: 0, right: 0 }}
+            dragMomentum={false}
             onDrag={(_, info) =>
-              setLean(
-                info.offset.x < -30 ? -1 : info.offset.x > 30 ? 1 : 0,
-              )
+              setLean(info.offset.x < -14 ? -1 : info.offset.x > 14 ? 1 : 0)
             }
             onDragEnd={(_, info) => {
               const past =
                 Math.abs(info.offset.x) > THROW_THRESHOLD ||
-                Math.abs(info.velocity.x) > 620;
+                Math.abs(info.velocity.x) > FLICK_VELOCITY;
               if (!past) {
                 setLean(0);
                 return;
               }
-              choose(info.offset.x < 0 ? "a" : "b");
+              // Direction comes from the throw, not the resting offset, so a
+              // fast flick that barely moved still resolves the way it was cast.
+              const dir =
+                Math.abs(info.velocity.x) > FLICK_VELOCITY
+                  ? info.velocity.x
+                  : info.offset.x;
+              choose(dir < 0 ? "a" : "b");
             }}
             exit={{
               x: exitX,
               opacity: 0,
-              transition: { duration: 0.18, ease: "easeOut" },
+              transition: { duration: 0.2, ease: "easeOut" },
             }}
-            transition={{ type: "spring", stiffness: 500, damping: 40 }}
+            transition={{ type: "spring", stiffness: 550, damping: 42 }}
           >
             <TaskCard task={top} lean={lean} />
+            <SwipeHint label="A" side="left" opacity={aHint} />
+            <SwipeHint label="B" side="right" opacity={bHint} />
           </motion.div>
         </AnimatePresence>
 
@@ -248,6 +258,61 @@ export function SwipeDeck() {
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * Full-card wash + oversized letter showing which response the current drag
+ * would pick.
+ *
+ * Violet for A, blue for B — deliberately not green/red. Both answers are
+ * legitimate preferences, and a right/wrong colour scheme would imply the
+ * annotator is being marked, which is only true on the hidden gold tasks.
+ */
+function SwipeHint({
+  label,
+  side,
+  opacity,
+}: {
+  label: string;
+  side: "left" | "right";
+  opacity: MotionValue<number>;
+}) {
+  const isA = side === "left";
+  return (
+    <motion.div
+      aria-hidden
+      style={{ opacity }}
+      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl"
+    >
+      <div
+        className="absolute inset-0 rounded-3xl"
+        style={{
+          background: isA
+            ? "linear-gradient(to right, rgba(139,92,246,0.45), rgba(139,92,246,0.08))"
+            : "linear-gradient(to left, rgba(59,130,246,0.45), rgba(59,130,246,0.08))",
+        }}
+      />
+      <div
+        className="absolute inset-0 rounded-3xl border-2"
+        style={{
+          borderColor: isA
+            ? "rgba(167,139,250,0.9)"
+            : "rgba(96,165,250,0.9)",
+        }}
+      />
+      <div className="relative flex flex-col items-center">
+        <span
+          className="text-[120px] leading-none font-black tracking-tighter text-white"
+          style={{ textShadow: "0 6px 40px rgba(0,0,0,0.5)" }}
+        >
+          {label}
+        </span>
+        <span className="mt-1 text-sm font-semibold tracking-[0.2em] text-white/85 uppercase">
+          Better
+        </span>
+      </div>
+    </motion.div>
   );
 }
 
