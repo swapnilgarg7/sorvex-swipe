@@ -53,11 +53,25 @@ auth + Postgres, framer-motion, zustand, zod. Components are hand-rolled with
 
 ## Swipe feel — the details that matter
 
-- `dragElastic={1}` on the card. Anything lower makes it resist the finger and
-  the swipe feels broken. Do not reintroduce elasticity to "add polish".
-- Commit on `offset > 80px` **or** `velocity > 380` — a fast flick that barely
-  moved should still resolve, and its direction comes from the velocity, not
-  the resting offset.
+- **The card flies fully off-screen before the confidence sheet opens.** This
+  is the single most important ordering rule in the app. The card is not
+  removed from the queue until `commit()`, which runs *after* confidence — so
+  if the sheet opens on choice, it appears over a card still sitting on screen
+  and the whole thing reads as "my swipe didn't take". `choose()` animates the
+  card out and only calls `setStep("confidence")` in the animation's `.then()`.
+- `dragElastic={1}` and **no `dragConstraints`**. Elasticity below 1 makes the
+  card resist the finger. Constraints make framer spring the card back to
+  centre while the fly-off animation is trying to throw it away — the two
+  fight, and the card snaps back under the sheet. Snap-back is animated by
+  hand in `onDragEnd` instead.
+- Commit on `offset > max(110px, 38% of card width)` **or**
+  `velocity > 700`. These are deliberately high: a committed swipe should feel
+  like a decision, and a nudge must always spring back. Direction comes from
+  velocity when it was a flick, so a fast cast that barely moved still resolves
+  the way it was aimed.
+- `flying` gates drag, keyboard, and the tap buttons so a second choice cannot
+  land while the first is still animating out.
+- The next card scales 0.965 → 1 as the top card leaves, so there is no gap.
 - While dragging, a full-card wash plus an oversized A/B letter shows which
   response the current drag would pick. Violet for A, blue for B —
   **deliberately not green/red**: both answers are legitimate preferences, and

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AnimatePresence,
+  animate,
   motion,
   useMotionValue,
   useTransform,
@@ -15,12 +16,19 @@ import { ReasonSheet } from "./reason-sheet";
 import { useSession } from "@/store/session";
 import type { Choice, Confidence } from "@/types/db";
 
-/** Drag past this (px) and the card commits on release. */
-const THROW_THRESHOLD = 80;
-/** A flick shorter than the threshold still commits if it is fast enough. */
-const FLICK_VELOCITY = 380;
+/**
+ * Fraction of the card's width you must drag past for the swipe to count.
+ * A committed swipe should feel like a decision, not something you can trip
+ * over — a nudge must always spring back.
+ */
+const THROW_RATIO = 0.38;
+const MIN_THRESHOLD = 110;
+/** A short drag still commits if it was thrown hard enough to be deliberate. */
+const FLICK_VELOCITY = 700;
 /** Distance at which the A/B hint reaches full strength. */
-const HINT_FULL = 90;
+const HINT_FULL = 100;
+/** How far off-screen a committed card flies. */
+const EXIT_X = 700;
 
 type Step = "choose" | "confidence" | "reason";
 
@@ -35,18 +43,23 @@ export function SwipeDeck() {
   const [step, setStep] = useState<Step>("choose");
   const [choice, setChoice] = useState<Choice | null>(null);
   const [confidence, setConfidence] = useState<Confidence | null>(null);
-  const [exitX, setExitX] = useState(0);
-
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-300, 0, 300], [-9, 0, 9]);
-  // Hint strength tracks the drag: A on the left, B on the right.
-  const aHint = useTransform(x, [-HINT_FULL, -14, 0], [1, 0, 0]);
-  const bHint = useTransform(x, [0, 14, HINT_FULL], [0, 0, 1]);
+  /** True from the moment a choice is made until the card has left the screen. */
+  const [flying, setFlying] = useState(false);
   const [lean, setLean] = useState(0);
 
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotate = useTransform(x, [-300, 0, 300], [-9, 0, 9]);
+  // Hint strength tracks the drag: A on the left, B on the right.
+  const aHint = useTransform(x, [-HINT_FULL, -16, 0], [1, 0, 0]);
+  const bHint = useTransform(x, [0, 16, HINT_FULL], [0, 0, 1]);
+
+  const deckRef = useRef<HTMLDivElement>(null);
   // Clock starts when the card is rendered, stops when a choice is made.
   // Seeded in the effect below, not during render — Date.now() is impure.
   const shownAt = useRef<number>(0);
+  const latency = useRef(0);
+
   const top = queue[0];
   const next = queue[1];
 
@@ -57,31 +70,56 @@ export function SwipeDeck() {
   useEffect(() => {
     shownAt.current = Date.now();
     x.set(0);
-  }, [top?.id, x]);
+    y.set(0);
+  }, [top?.id, x, y]);
 
-  const latency = useRef(0);
+  const threshold = useCallback(() => {
+    const w = deckRef.current?.offsetWidth ?? 380;
+    return Math.max(MIN_THRESHOLD, w * THROW_RATIO);
+  }, []);
 
+  /**
+   * Commits the choice. The card flies fully off-screen FIRST; only once it is
+   * gone does the confidence sheet open. Opening the sheet over a card that is
+   * still sitting there reads as "my swipe didn't take".
+   */
   const choose = useCallback(
     (c: Choice) => {
-      if (!top || step !== "choose") return;
+      if (!top || step !== "choose" || flying) return;
+
       latency.current = shownAt.current ? Date.now() - shownAt.current : 0;
       setChoice(c);
       setLean(0);
-      setExitX(c === "a" ? -520 : c === "b" ? 520 : 0);
+      setFlying(true);
+
+      const settle = () => {
+        if (c === "skip") {
+          commit({
+            taskId: top.id,
+            choice: "skip",
+            confidence: null,
+            reason: null,
+            latencyMs: latency.current,
+          });
+          setChoice(null);
+          setFlying(false);
+          return;
+        }
+        setStep("confidence");
+      };
 
       if (c === "skip") {
-        commit({
-          taskId: top.id,
-          choice: "skip",
-          confidence: null,
-          reason: null,
-          latencyMs: latency.current,
-        });
+        // Skips drop away downward rather than picking a side.
+        void animate(y, 900, { duration: 0.28, ease: "easeIn" }).then(settle);
         return;
       }
-      setStep("confidence");
+
+      void animate(x, c === "a" ? -EXIT_X : EXIT_X, {
+        duration: 0.26,
+        ease: [0.22, 0.61, 0.36, 1],
+      }).then(settle);
     },
-    [top, step, commit],
+    [top, step, flying, commit, x, y],
   );
 
   const finish = useCallback(
@@ -97,6 +135,7 @@ export function SwipeDeck() {
       setStep("choose");
       setChoice(null);
       setConfidence(null);
+      setFlying(false);
     },
     [top, choice, commit],
   );
@@ -121,6 +160,7 @@ export function SwipeDeck() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (step === "choose") {
+        if (flying) return;
         if (e.key === "ArrowLeft") return choose("a");
         if (e.key === "ArrowRight") return choose("b");
         if (e.key === "ArrowDown" || e.key === "s") return choose("skip");
@@ -138,7 +178,7 @@ export function SwipeDeck() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, choose, onConfidence]);
+  }, [step, flying, choose, onConfidence]);
 
   if (!top) {
     return (
@@ -167,53 +207,62 @@ export function SwipeDeck() {
     );
   }
 
+  const interactive = step === "choose" && !flying;
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col px-3 pb-3">
-      <div className="relative min-h-0 flex-1">
-        {/* Next card, already rendered underneath. There is never a spinner
-            between two tasks. */}
+      <div ref={deckRef} className="relative min-h-0 flex-1">
+        {/* Next card, already rendered underneath. It rises into place as the
+            current card flies off, so there is never a gap. */}
         {next && (
-          <div className="absolute inset-0 scale-[0.965] opacity-50">
+          <motion.div
+            className="absolute inset-0"
+            animate={{
+              scale: flying ? 1 : 0.965,
+              opacity: flying ? 1 : 0.5,
+            }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
+          >
             <TaskCard task={next} />
-          </div>
+          </motion.div>
         )}
 
         <AnimatePresence mode="popLayout">
           <motion.div
             key={top.id}
-            className="absolute inset-0 cursor-grab touch-pan-y active:cursor-grabbing"
-            style={{ x, rotate }}
-            drag={step === "choose" ? "x" : false}
-            // dragElastic 1 = the card tracks the finger 1:1. Anything lower
-            // makes it feel like it is resisting the swipe.
+            className="absolute inset-0 touch-pan-y"
+            style={{ x, y, rotate, cursor: interactive ? "grab" : "default" }}
+            drag={interactive ? "x" : false}
+            // dragElastic 1 = the card tracks the finger 1:1. No constraints:
+            // snap-back is animated by hand below so it cannot fight the
+            // fly-off animation.
             dragElastic={1}
-            dragConstraints={{ left: 0, right: 0 }}
             dragMomentum={false}
+            whileDrag={{ cursor: "grabbing" }}
             onDrag={(_, info) =>
-              setLean(info.offset.x < -14 ? -1 : info.offset.x > 14 ? 1 : 0)
+              setLean(info.offset.x < -16 ? -1 : info.offset.x > 16 ? 1 : 0)
             }
             onDragEnd={(_, info) => {
-              const past =
-                Math.abs(info.offset.x) > THROW_THRESHOLD ||
-                Math.abs(info.velocity.x) > FLICK_VELOCITY;
-              if (!past) {
+              const farEnough = Math.abs(info.offset.x) > threshold();
+              const fastEnough = Math.abs(info.velocity.x) > FLICK_VELOCITY;
+
+              if (!farEnough && !fastEnough) {
+                // Not a decision — spring back and leave the card in play.
                 setLean(0);
+                void animate(x, 0, {
+                  type: "spring",
+                  stiffness: 600,
+                  damping: 40,
+                });
                 return;
               }
-              // Direction comes from the throw, not the resting offset, so a
-              // fast flick that barely moved still resolves the way it was cast.
-              const dir =
-                Math.abs(info.velocity.x) > FLICK_VELOCITY
-                  ? info.velocity.x
-                  : info.offset.x;
+
+              // Direction comes from the throw when it was a flick, so a fast
+              // cast that barely moved still resolves the way it was aimed.
+              const dir = fastEnough ? info.velocity.x : info.offset.x;
               choose(dir < 0 ? "a" : "b");
             }}
-            exit={{
-              x: exitX,
-              opacity: 0,
-              transition: { duration: 0.2, ease: "easeOut" },
-            }}
-            transition={{ type: "spring", stiffness: 550, damping: 42 }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
           >
             <TaskCard task={top} lean={lean} />
             <SwipeHint label="A" side="left" opacity={aHint} />
@@ -221,10 +270,7 @@ export function SwipeDeck() {
           </motion.div>
         </AnimatePresence>
 
-        <ConfidenceSheet
-          open={step === "confidence"}
-          onSelect={onConfidence}
-        />
+        <ConfidenceSheet open={step === "confidence"} onSelect={onConfidence} />
         <ReasonSheet
           open={step === "reason"}
           onSelect={(reason) => confidence && finish(confidence, reason)}
@@ -238,12 +284,12 @@ export function SwipeDeck() {
           side="left"
           label="A better"
           hint="←"
-          disabled={step !== "choose"}
+          disabled={!interactive}
           onClick={() => choose("a")}
         />
         <button
           onClick={() => choose("skip")}
-          disabled={step !== "choose"}
+          disabled={!interactive}
           aria-label="Skip this task"
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/35 transition-colors hover:text-white/70 disabled:opacity-30"
         >
@@ -253,7 +299,7 @@ export function SwipeDeck() {
           side="right"
           label="B better"
           hint="→"
-          disabled={step !== "choose"}
+          disabled={!interactive}
           onClick={() => choose("b")}
         />
       </div>
@@ -298,9 +344,7 @@ function SwipeHint({
       <div
         className="absolute inset-0 rounded-3xl border-2"
         style={{
-          borderColor: isA
-            ? "rgba(167,139,250,0.9)"
-            : "rgba(96,165,250,0.9)",
+          borderColor: isA ? "rgba(167,139,250,0.9)" : "rgba(96,165,250,0.9)",
         }}
       />
       <div className="relative flex flex-col items-center">
